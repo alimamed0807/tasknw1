@@ -9,40 +9,46 @@ class Program
 {
     static async Task Main()
     {
-        Console.WriteLine("==========================================");
-        Console.WriteLine("               FILE SERVER                ");
-        Console.WriteLine("==========================================");
-
-        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        socket.Bind(new IPEndPoint(IPAddress.Any, 27001));
-        socket.Listen(10);
-        Console.WriteLine("Server isleyir...");
-
         while (true)
         {
-            var client = await socket.AcceptAsync();
-            _ = Task.Run(async () =>
+            Console.WriteLine("==========================================");
+            Console.WriteLine("               FILE CLIENT                ");
+            Console.WriteLine("==========================================");
+            Console.WriteLine("1 - Fayl gonder (sekil/ses)");
+            Console.WriteLine("0 - Cixis");
+            Console.WriteLine("==========================================");
+            Console.Write("Secim edin: ");
+            string choice = Console.ReadLine();
+
+            if (choice == "0") break;
+
+            if (choice == "1")
             {
-                var buffer = new byte[1024];
+                Console.Write("Fayl yolu: ");
+                string path = Console.ReadLine().Trim('"');
 
-                int len = await client.ReceiveAsync(buffer, SocketFlags.None);
-                string fileName = Encoding.UTF8.GetString(buffer, 0, len);
-
-                byte[] sizeBuf = new byte[8];
-                await client.ReceiveAsync(sizeBuf, SocketFlags.None);
-                long size = BitConverter.ToInt64(sizeBuf, 0);
-
-                byte[] data = new byte[size];
-                int received = 0;
-                while (received < size)
+                if (!File.Exists(path))
                 {
-                    received += await client.ReceiveAsync(new ArraySegment<byte>(data, received, (int)size - received), SocketFlags.None);
+                    Console.WriteLine("Fayl tapilmadi!");
+                    continue;
                 }
 
-                File.WriteAllBytes(fileName, data);
-                Console.WriteLine($"Qebul edildi: {fileName}");
-                client.Dispose();
-            });
+                var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                await socket.ConnectAsync(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 27001));
+
+                string name = Path.GetFileName(path);
+                await socket.SendAsync(Encoding.UTF8.GetBytes(name), SocketFlags.None);
+                await Task.Delay(50);
+
+                byte[] data = File.ReadAllBytes(path);
+                await socket.SendAsync(BitConverter.GetBytes((long)data.Length), SocketFlags.None);
+                await Task.Delay(50);
+
+                await socket.SendAsync(data, SocketFlags.None);
+                Console.WriteLine("Fayl ugurla gonderildi!");
+
+                socket.Dispose();
+            }
         }
     }
 }
